@@ -47,12 +47,37 @@ struct entry {
 	int file_size;
 };
 
-static struct entry entires[MAX_ENTRIES];
+static struct entry *entries[MAX_ENTRIES];
+
+//method that print all entries in the system.
+void print_entries() {
+	for (int i = 0; i < MAX_ENTRIES; i++)
+	{
+		if (entries[i]) {
+			printf("entries[i]->name: %s \n", entries[i]->name);
+			//Print the path
+			printf("entries[i]->full_path: %s \n", entries[i]->full_path);
+		}
+	}
+}
+
+char* get_parent_path(const char* path) {
+    char* last_slash = strrchr(path, '/');
+    if (last_slash == NULL) {
+        return NULL;
+    }
+    int parent_len = last_slash - path;
+    char* parent_path = (char*) malloc(parent_len + 2);
+    strncpy(parent_path, path, parent_len + 1);
+    parent_path[parent_len + 1] = '\0';
+	printf("parent_path: %s \n", parent_path);
+    return parent_path;
+}
 
 int find_empty_entry() {
 	for (int i = 0; i < MAX_ENTRIES; i++) {
 		// if entry is empty.
-		if (entires[i].name == NULL) {
+		if (!entries[i]) {
 			return i;
 		}
 	}
@@ -65,18 +90,23 @@ char* get_entry_name(char *path) {
 	if (name == NULL) {
 		return path;
 	}
-	printf("name: %s \n", name + 1);
-	return name + 1;
+	name = name + 1;
+    printf("name: %s \n", name);
+    return strdup(name);
 }
 
 struct entry *get_entry(const char *path) {
 	for (int i = 0; i < MAX_ENTRIES; i++)
 	{	
-		if (entires[i].path != NULL && strcmp(entires[i].path, path) == 0) {
-			printf("found entry: %s \n", entires[i].name);
-			return &entires[i];
+		printf("%d\n", i);
+		if (entries[i]) {
+			if (strcmp(entries[i]->full_path, path) == 0) {
+				printf("get_entry: found entry: %s \n", entries[i]->name);
+				return entries[i];
+			}
 		}
 	}
+	printf("Entry not found");
 	return NULL;
 	
 }
@@ -92,6 +122,7 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
 	} else {
 		struct entry *e = get_entry(path);
 		if (e == NULL) {
+			printf("lfs_getattr: Entry not found\n");
 			return -ENOENT;
 		}
 		if(e->is_dir) {
@@ -108,23 +139,24 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
 }
 
 int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi ) {
-	(void) offset;
-	(void) fi;
+	// (void) offset;
+	// (void) fi;
+
 	printf("readdir: (path=%s)\n", path);
 
-	if(strcmp(path, "/") != 0)
-		return -ENOENT;
 
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 
-
-
 	//Find all files in the directory.
 	for (int i = 0; i < MAX_ENTRIES; i++)
 	{
-		if (entires[i].name != NULL && strcmp(entires[i].path, path) == 0) {
-			filler(buf, entires[i].name, NULL, 0);
+		if(entries[i]) {
+			printf("lfs_readdir: entries[i]->path: %s \n", entries[i]->path);
+			printf("path: %s \n", path);
+			if (strcmp(entries[i]->path, path) == 0) {
+				filler(buf, entries[i]->name, NULL, 0);
+			}
 		}
 	}
 
@@ -155,25 +187,44 @@ int lfs_write(const char *path, const char *buf, size_t size, off_t offset, stru
 
 int lfs_mkdir(const char *path, mode_t mode) {
 	printf("mkdir: (path=%s)\n", path);
-	struct entry *e = malloc(sizeof(struct entry));
+	int index = find_empty_entry();
+	printf("index: %d \n", index);
+
+	entries[index] = calloc(sizeof(struct entry), 1);
+
+	if(!entries[index]){
+		return -ENOMEM;
+	}
+
+	struct entry *e = entries[index];
+
 	e->name = get_entry_name(path);
-	e->path = path;
-	e->full_path = path;
+	e->path = get_parent_path(path);
+	e->full_path = malloc(strlen(path) + 1);
+	if (e->full_path == NULL) {
+ 	   free(e);
+ 	   return -ENOMEM;
+	}
+	strcpy(e->full_path, path);
 	e->is_dir = true;
 	e->file_size = 0;
 	
 	// find empty entry and add it.
-	int index = find_empty_entry();
-	printf("index: %d is empty \n", index);
-	entires[index] = *e;
+	entries[index] = e;
+	printf("LFS_mkdir added entry: %s  on index: %d \n", entries[index]->name, index);
 
-
-
+	printf("Print all entries: \n\n\n");
+	print_entries();
+	printf("\n");
 
 	return 0;
 }
 
 int main( int argc, char *argv[] ) {
+
+	// Initialize the entries array to NULL pointers
+    memset(entries, 0, MAX_ENTRIES * sizeof(struct entry*));
+
 	fuse_main( argc, argv, &lfs_oper );
 
 	return 0;
