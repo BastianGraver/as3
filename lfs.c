@@ -3,6 +3,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
+
+#define max_dir_entries 10
 
 int lfs_getattr( const char *, struct stat * );
 int lfs_readdir( const char *, void *, fuse_fill_dir_t, off_t, struct fuse_file_info * );
@@ -33,6 +36,37 @@ static struct fuse_operations lfs_oper = {
 	.rename = NULL,
 	.utime = NULL
 };
+
+// entry in the system.
+struct entry {
+	char *name;
+	char *path;
+	char *full_path;
+	struct inode *inode;
+	bool is_dir;
+	int file_size;
+};
+
+static struct entry entires[max_dir_entries];
+
+int find_empty_entry() {
+	for (int i = 0; i < max_dir_entries; i++) {
+		// if entry is empty.
+		if (&entires[i] == NULL) {
+			return i;
+		}
+	}
+	printf("No more space for entries");
+	return -1;
+}
+
+char* get_entry_name(char *path) {
+	char *name = strrchr(path, '/');
+	if (name == NULL) {
+		return path;
+	}
+	return name;
+}
 
 int lfs_getattr( const char *path, struct stat *stbuf ) {
 	int res = 0;
@@ -91,6 +125,21 @@ int lfs_write(const char *path, const char *buf, size_t size, off_t offset, stru
 
 int lfs_mkdir(const char *path, mode_t mode) {
 	printf("mkdir: (path=%s)\n", path);
+	struct entry *e = malloc(sizeof(struct entry));
+	e->name = get_entry_name(path);
+	e->path = path;
+	e->full_path = path;
+	e->is_dir = true;
+	e->file_size = 0;
+	
+	// find empty entry and add it.
+	int index = find_empty_entry();
+	printf("index: %d is empty \n", index);
+	entires[index] = *e;
+
+
+
+
 	return 0;
 }
 
