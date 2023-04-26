@@ -9,6 +9,14 @@ int lfs_readdir( const char *, void *, fuse_fill_dir_t, off_t, struct fuse_file_
 int lfs_open( const char *, struct fuse_file_info * );
 int lfs_read( const char *, char *, size_t, off_t, struct fuse_file_info * );
 int lfs_release(const char *path, struct fuse_file_info *fi);
+int lfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
+int lfs_mkdir(const char *path, mode_t mode);
+
+struct inode {
+	int id;
+	int size;
+	int blocks[10];
+};
 
 static struct fuse_operations lfs_oper = {
 	.getattr	= lfs_getattr,
@@ -78,7 +86,7 @@ int lfs_release(const char *path, struct fuse_file_info *fi) {
 
 int lfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
 	printf("write: (path=%s)\n", path);
-	return 0;
+	return size;
 }
 
 int lfs_mkdir(const char *path, mode_t mode) {
