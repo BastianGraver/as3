@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-#define max_dir_entries 10
+#define MAX_ENTRIES 10
 
 int lfs_getattr( const char *, struct stat * );
 int lfs_readdir( const char *, void *, fuse_fill_dir_t, off_t, struct fuse_file_info * );
@@ -47,12 +47,12 @@ struct entry {
 	int file_size;
 };
 
-static struct entry entires[max_dir_entries];
+static struct entry entires[MAX_ENTRIES];
 
 int find_empty_entry() {
-	for (int i = 0; i < max_dir_entries; i++) {
+	for (int i = 0; i < MAX_ENTRIES; i++) {
 		// if entry is empty.
-		if (&entires[i] == NULL) {
+		if (entires[i].name == NULL) {
 			return i;
 		}
 	}
@@ -65,25 +65,46 @@ char* get_entry_name(char *path) {
 	if (name == NULL) {
 		return path;
 	}
-	return name;
+	printf("name: %s \n", name + 1);
+	return name + 1;
+}
+
+struct entry *get_entry(const char *path) {
+	for (int i = 0; i < MAX_ENTRIES; i++)
+	{	
+		if (entires[i].path != NULL && strcmp(entires[i].path, path) == 0) {
+			printf("found entry: %s \n", entires[i].name);
+			return &entires[i];
+		}
+	}
+	return NULL;
+	
 }
 
 int lfs_getattr( const char *path, struct stat *stbuf ) {
-	int res = 0;
+	printf("Get Attribute");
 	printf("getattr: (path=%s)\n", path);
+	memset( stbuf, 0, sizeof(struct stat) );
 
-	memset(stbuf, 0, sizeof(struct stat));
-	if( strcmp( path, "/" ) == 0 ) {
+	if(strcmp(path, "/") == 0) {
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
-	} else if( strcmp( path, "/hello" ) == 0 ) {
-		stbuf->st_mode = S_IFREG | 0777;
-		stbuf->st_nlink = 1;
-		stbuf->st_size = 12;
-	} else
-		res = -ENOENT;
-
-	return res;
+	} else {
+		struct entry *e = get_entry(path);
+		if (e == NULL) {
+			return -ENOENT;
+		}
+		if(e->is_dir) {
+			stbuf->st_mode = S_IFDIR | 0755;
+			stbuf->st_nlink = 2;
+		}
+		else {
+			stbuf->st_mode = S_IFREG | 0777;
+			stbuf->st_nlink = 1;
+			stbuf->st_size = e->file_size;
+		}
+	}
+	return 0;
 }
 
 int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi ) {
@@ -96,7 +117,16 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
 
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
-	filler(buf, "hello", NULL, 0);
+
+
+
+	//Find all files in the directory.
+	for (int i = 0; i < MAX_ENTRIES; i++)
+	{
+		if (entires[i].name != NULL && strcmp(entires[i].path, path) == 0) {
+			filler(buf, entires[i].name, NULL, 0);
+		}
+	}
 
 	return 0;
 }
