@@ -14,12 +14,7 @@ int lfs_read( const char *, char *, size_t, off_t, struct fuse_file_info * );
 int lfs_release(const char *path, struct fuse_file_info *fi);
 int lfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
 int lfs_mkdir(const char *path, mode_t mode);
-
-struct inode {
-	int id;
-	int size;
-	int blocks[10];
-};
+int lfs_rmdir(const char *path);
 
 static struct fuse_operations lfs_oper = {
 	.getattr	= lfs_getattr,
@@ -27,7 +22,7 @@ static struct fuse_operations lfs_oper = {
 	.mknod = NULL,
 	.mkdir = lfs_mkdir,
 	.unlink = NULL,
-	.rmdir = NULL,
+	.rmdir = lfs_rmdir,
 	.truncate = NULL,
 	.open	= lfs_open,
 	.read	= lfs_read,
@@ -42,15 +37,16 @@ struct entry {
 	char *name;
 	char *path;
 	char *full_path;
-	struct inode *inode;
 	bool is_dir;
 	int file_size;
+	char* data;
 };
 
 static struct entry *entries[MAX_ENTRIES];
 
 //method that print all entries in the system.
 void print_entries() {
+	printf("----------------print_entries----------------\n");
 	for (int i = 0; i < MAX_ENTRIES; i++)
 	{
 		if (entries[i]) {
@@ -62,6 +58,7 @@ void print_entries() {
 }
 
 char* get_parent_path(const char* path) {
+	printf("----------------get_parent_path----------------\n");
     char* last_slash = strrchr(path, '/');
     if (last_slash == NULL) {
         return NULL;
@@ -75,9 +72,10 @@ char* get_parent_path(const char* path) {
 }
 
 int find_empty_entry() {
+	printf("----------------find_empty_entry----------------\n");
 	for (int i = 0; i < MAX_ENTRIES; i++) {
-		// if entry is empty.
-		if (!entries[i]) {
+		printf("i: %d \n", entries[i]);
+		if (entries[i] == NULL) {
 			return i;
 		}
 	}
@@ -86,6 +84,7 @@ int find_empty_entry() {
 }
 
 char* get_entry_name(char *path) {
+	printf("----------------get_entry_name----------------\n");
 	char *name = strrchr(path, '/');
 	if (name == NULL) {
 		return path;
@@ -96,10 +95,11 @@ char* get_entry_name(char *path) {
 }
 
 struct entry *get_entry(const char *path) {
+	printf("----------------*get_entry----------------\n");
 	for (int i = 0; i < MAX_ENTRIES; i++)
 	{	
 		printf("%d\n", i);
-		if (entries[i]) {
+		if (entries[i] != NULL) {
 			if (strcmp(entries[i]->full_path, path) == 0) {
 				printf("get_entry: found entry: %s \n", entries[i]->name);
 				return entries[i];
@@ -112,6 +112,7 @@ struct entry *get_entry(const char *path) {
 }
 
 int lfs_getattr( const char *path, struct stat *stbuf ) {
+	printf("----------------lfs_getattr----------------\n");
 	printf("Get Attribute");
 	printf("getattr: (path=%s)\n", path);
 	memset( stbuf, 0, sizeof(struct stat) );
@@ -139,15 +140,37 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
 }
 
 int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi ) {
+	printf("----------------lfs_readdir----------------\n");
 	// (void) offset;
 	// (void) fi;
 
 	printf("readdir: (path=%s)\n", path);
 
-
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 
+	//If in directory.
+	if (path != NULL && strcmp(path, "/") != 0) {
+		printf("We are Not in root ");
+		//Find all files in the directory.
+		for (int i = 0; i < MAX_ENTRIES; i++)
+		{
+			if(entries[i]) {
+				printf("lfs_readdir: entries[i]->path: %s \n", entries[i]->path);
+				printf("path: %s \n", path);
+				//copy the path
+				char* tmp = strdup(path);
+				//Add a slash to the end of the path
+				strcat(tmp, "/");
+				if (strcmp(entries[i]->path, tmp) == 0) {
+					filler(buf, entries[i]->name, NULL, 0);
+				}
+			}
+		}
+		return 0;
+	}
+
+	//If in root
 	//Find all files in the directory.
 	for (int i = 0; i < MAX_ENTRIES; i++)
 	{
@@ -165,11 +188,16 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
 
 //Permission
 int lfs_open( const char *path, struct fuse_file_info *fi ) {
+	pritnf("----------------lfs_open----------------\n");
 	printf("open: (path=%s)\n", path);
+	//Create a new file
+
+
 	return 0;
 }
 
 int lfs_read( const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi ) {
+	print("----------------lfs_read----------------\n");
     printf("read: (path=%s)\n", path);
 	memcpy( buf, "Hello\n", 6 );
 	return 6;
@@ -181,11 +209,15 @@ int lfs_release(const char *path, struct fuse_file_info *fi) {
 }
 
 int lfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi) {
+	printf("----------------lfs_write----------------\n");
 	printf("write: (path=%s)\n", path);
+
+
 	return size;
 }
 
 int lfs_mkdir(const char *path, mode_t mode) {
+	printf("----------------lfs_mkdir----------------\n");
 	printf("mkdir: (path=%s)\n", path);
 	int index = find_empty_entry();
 	printf("index: %d \n", index);
@@ -217,6 +249,44 @@ int lfs_mkdir(const char *path, mode_t mode) {
 	print_entries();
 	printf("\n");
 
+	return 0;
+}
+
+//Function to delete a entry
+void delete_entry(const char *path) {
+	printf("----------------delete_entry----------------\n");
+	printf("delete_entry: (path=%s)\n", path);
+
+	//remove entry from entries array
+	for (int i = 0; i < MAX_ENTRIES; i++)
+	{
+		if(entries[i]) {
+			if (strcmp(entries[i]->full_path, path) == 0) {
+				free(entries[i]->name);
+				free(entries[i]->path);
+				free(entries[i]->full_path);
+				free(entries[i]);
+				entries[i] = NULL;
+			}
+		}
+	}
+}
+
+//Delete a directory
+int lfs_rmdir(const char *path) {
+	printf("----------------lfs_rmdir----------------\n");
+	printf("rmdir: (path=%s)\n", path);
+	struct entry *e = get_entry(path);
+	if (e == NULL) {
+		printf("lfs_rmdir: Entry not found\n");
+		return -ENOENT;
+	}
+	if (!e->is_dir) {
+		printf("lfs_rmdir: Entry is not a directory\n");
+		return -ENOTDIR;
+	}
+	//Delete entry
+	delete_entry(path);
 	return 0;
 }
 
