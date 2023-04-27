@@ -17,6 +17,7 @@ int lfs_mkdir(const char *path, mode_t mode);
 int lfs_rmdir(const char *path);
 int lfs_mknod(const char *path, mode_t mode, dev_t dev);
 int lfs_unlink(const char *path);
+int lfs_utime(const char *path, struct utimbuf *ubuf);
 
 static struct fuse_operations lfs_oper = {
 	.getattr	= lfs_getattr,
@@ -286,7 +287,6 @@ int lfs_mkdir(const char *path, mode_t mode) {
 	e->full_path = malloc(strlen(path) + 1);
 	e->access_time = time(NULL);
 	e->modification_time = time(NULL);
-	
 	if (e->full_path == NULL) {
  	   free(e);
  	   return -ENOMEM;
@@ -341,6 +341,20 @@ int lfs_rmdir(const char *path) {
 	}
 	//Delete entry
 	delete_entry(path);
+	return 0;
+}
+
+int lfs_utime(const char *path, struct utimbuf *ubuf) {
+	printf("----------------lfs_utime----------------\n");
+	printf("utime: (path=%s)\n", path);
+	struct entry *e = get_entry(path);
+	if (e == NULL) {
+		printf("lfs_utime: Entry not found\n");
+		return -ENOENT;
+	}
+	//Update access and modification time
+	e->access_time = ubuf->actime;
+	e->modification_time = ubuf->modtime;
 	return 0;
 }
 
