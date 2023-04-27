@@ -15,13 +15,15 @@ int lfs_release(const char *path, struct fuse_file_info *fi);
 int lfs_write(const char *path, const char *buf, size_t size, off_t offset, struct fuse_file_info *fi);
 int lfs_mkdir(const char *path, mode_t mode);
 int lfs_rmdir(const char *path);
+int lfs_mknod(const char *path, mode_t mode, dev_t dev);
+int lfs_unlink(const char *path);
 
 static struct fuse_operations lfs_oper = {
 	.getattr	= lfs_getattr,
 	.readdir	= lfs_readdir,
-	.mknod = NULL,
+	.mknod = lfs_mknod,
 	.mkdir = lfs_mkdir,
-	.unlink = NULL,
+	.unlink = lfs_unlink,
 	.rmdir = lfs_rmdir,
 	.truncate = NULL,
 	.open	= lfs_open,
@@ -185,19 +187,64 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
 
 	return 0;
 }
+//Create a file node
+int lfs_mknod(const char *path, mode_t mode, dev_t rdev) {
+	printf("----------------lfs_mknod----------------\n");
+	printf("mknod: (path=%s)\n", path);
+	//Find an empty entry
+	int index = find_empty_entry();
+	if (index == -1) {
+		printf("lfs_mknod: No more space for entries");
+		return -1;
+	}
+	//Create a new file
+	struct entry *e = (struct entry*) malloc(sizeof(struct entry));
+	e->name = get_entry_name(path);
+	e->path = get_parent_path(path);
+	e->full_path = strdup(path);
+	e->is_dir = 0;
+	e->file_size = 0;
+	entries[index] = e;
+	return 0;
+}
+
+int lfs_unlink(const char *path) {
+	printf("----------------lfs_unlink----------------\n");
+	printf("unlink: (path=%s)\n", path);
+	//Find the entry
+	struct entry *e = get_entry(path);
+	printf("----------------lfs_unlink----------------\n");
+	if (e == NULL) {
+		printf("lfs_unlink: Entry not found\n");
+		return -ENOENT;
+	}
+	//Remove the entry
+	for (int i = 0; i < MAX_ENTRIES; i++)
+	{
+		if (entries[i] == e) {
+			printf("SIKE!");
+			printf("lfs_unlink: file name %s: removed\n", entries[i]->name);
+			entries[i] = NULL;
+			free(e);
+			return 0;
+		}
+	}
+	printf("lfs_unlink: Entry not found\n");
+	return -ENOENT;
+}
 
 //Permission
+//Create a file node
 int lfs_open( const char *path, struct fuse_file_info *fi ) {
-	pritnf("----------------lfs_open----------------\n");
+	printf("----------------lfs_open----------------\n");
 	printf("open: (path=%s)\n", path);
-	//Create a new file
 
 
 	return 0;
 }
 
 int lfs_read( const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi ) {
-	print("----------------lfs_read----------------\n");
+	printf("----------------lfs_read----------------\n");
     printf("read: (path=%s)\n", path);
 	memcpy( buf, "Hello\n", 6 );
 	return 6;

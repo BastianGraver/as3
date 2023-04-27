@@ -14,3 +14,4 @@ chmod 755 /tmp/lfs-mountpoint/
 
 # change to mount directory
 cd /tmp/lfs-mountpoint/
+
