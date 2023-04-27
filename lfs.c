@@ -42,6 +42,8 @@ struct entry {
 	bool is_dir;
 	int file_size;
 	char* data;
+	time_t access_time;
+	time_t modification_time;
 };
 
 static struct entry *entries[MAX_ENTRIES];
@@ -204,6 +206,8 @@ int lfs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	e->full_path = strdup(path);
 	e->is_dir = 0;
 	e->file_size = 0;
+	e->access_time = time(NULL);
+	e->modification_time = time(NULL);
 	entries[index] = e;
 	return 0;
 }
@@ -280,6 +284,9 @@ int lfs_mkdir(const char *path, mode_t mode) {
 	e->name = get_entry_name(path);
 	e->path = get_parent_path(path);
 	e->full_path = malloc(strlen(path) + 1);
+	e->access_time = time(NULL);
+	e->modification_time = time(NULL);
+	
 	if (e->full_path == NULL) {
  	   free(e);
  	   return -ENOMEM;
