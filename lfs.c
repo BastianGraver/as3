@@ -18,6 +18,7 @@ int lfs_rmdir(const char *path);
 int lfs_mknod(const char *path, mode_t mode, dev_t dev);
 int lfs_unlink(const char *path);
 int lfs_utime(const char *path, struct utimbuf *ubuf);
+int lfs_truncate(const char *path, off_t size);
 
 static struct fuse_operations lfs_oper = {
 	.getattr	= lfs_getattr,
@@ -26,7 +27,7 @@ static struct fuse_operations lfs_oper = {
 	.mkdir = lfs_mkdir,
 	.unlink = lfs_unlink,
 	.rmdir = lfs_rmdir,
-	.truncate = NULL,
+	.truncate = lfs_truncate,
 	.open	= lfs_open,
 	.read	= lfs_read,
 	.release = lfs_release,
@@ -238,21 +239,44 @@ int lfs_unlink(const char *path) {
 	return -ENOENT;
 }
 
-//Permission
-//Create a file node
 int lfs_open( const char *path, struct fuse_file_info *fi ) {
 	printf("----------------lfs_open----------------\n");
 	printf("open: (path=%s)\n", path);
+	//remove entry from entries array
 
-
+	struct entry *e = get_entry(path);
+	if (e == NULL) {
+		printf("lfs_open: Entry not found\n");
+		return -ENOENT;
+	}
+	fi->fh = (uint64_t) e;
+	printf("fi->fh = (uint64_t) e\n");
 	return 0;
 }
 
 int lfs_read( const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi ) {
 	printf("----------------lfs_read----------------\n");
     printf("read: (path=%s)\n", path);
-	memcpy( buf, "Hello\n", 6 );
-	return 6;
+
+	struct entry *e = (struct entry*) fi->fh;
+	if (e == NULL) {
+		printf("lfs_open: Entry not found\n");
+		return -ENOENT;
+	}
+	if (e->data == NULL) {
+		printf("lfs_read: No data found\n");
+		return -ENOENT;
+	}
+	//Pinrt e->data
+	printf("e->data: %s\n", e->data);
+
+	memcpy(buf, e->data, size); 
+	e->access_time = time(NULL);
+
+	//print buffer
+	printf("buf: %s\n", buf);
+
+	return size;
 }
 
 int lfs_release(const char *path, struct fuse_file_info *fi) {
@@ -264,8 +288,59 @@ int lfs_write(const char *path, const char *buf, size_t size, off_t offset, stru
 	printf("----------------lfs_write----------------\n");
 	printf("write: (path=%s)\n", path);
 
+	struct entry *e = (struct entry*) fi->fh;
+	if (e == NULL) {
+		printf("lfs_open: Entry not found\n");
+		return -ENOENT;
+	}
 
+	//If the file is empty
+	if(e->data) {
+		free(e->data);
+	}
+
+	//print buffer
+	printf("buf: %s\n", buf);
+
+	e->data = (char*) malloc(size);
+	memcpy(e->data, buf, size); 
+
+	//print e->data
+	printf("e->data: %s\n", e->data);
+
+	e->access_time = time(NULL);
+	e->modification_time = time(NULL);
+	e->file_size = size + offset;
+	
 	return size;
+}
+
+int lfs_truncate(const char* path, off_t size) {
+	printf("----------------lfs_truncate----------------\n");
+	printf("truncate: (path=%s)\n", path);
+
+	struct entry *e = get_entry(path);
+	if (e == NULL) {
+		printf("lfs_truncate: Entry not found\n");
+		return -ENOENT;
+	}
+
+	if (e->data == NULL) {
+		printf("lfs_truncate: No data found\n");
+		return -ENOENT;
+	}
+
+	//New buffer
+	char *new_buf = (char*) malloc(size);
+	memcpy(new_buf, e->data, size);
+	free(e->data);
+
+	e->data = new_buf;
+	e->file_size = size;
+	e->modification_time = time(NULL);
+	e->access_time = time(NULL);	
+	return 0;
+
 }
 
 int lfs_mkdir(const char *path, mode_t mode) {
@@ -360,10 +435,19 @@ int lfs_utime(const char *path, struct utimbuf *ubuf) {
 
 int main( int argc, char *argv[] ) {
 
+	// Open the file for reading
+    FILE *file = fopen(argv[3], "rb");
+    if (!file) {
+        return -1;
+    }
+
+
+
 	// Initialize the entries array to NULL pointers
     memset(entries, 0, MAX_ENTRIES * sizeof(struct entry*));
 
 	fuse_main( argc, argv, &lfs_oper );
+
 
 	return 0;
 }
