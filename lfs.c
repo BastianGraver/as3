@@ -435,14 +435,6 @@ int lfs_utime(const char *path, struct utimbuf *ubuf) {
 
 int main( int argc, char *argv[] ) {
 
-	// Open the file for reading
-    FILE *file = fopen(argv[3], "rb");
-    if (!file) {
-        return -1;
-    }
-
-
-
 	// Initialize the entries array to NULL pointers
     memset(entries, 0, MAX_ENTRIES * sizeof(struct entry*));
 
