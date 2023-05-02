@@ -49,6 +49,7 @@ struct entry {
 };
 
 static struct entry *entries[MAX_ENTRIES];
+static int entries_count = 0;
 
 //method that print all entries in the system.
 void print_entries() {
@@ -142,6 +143,8 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
 			stbuf->st_size = e->file_size;
 		}
 	}
+	//print number of entries
+	printf("entries_count: %d \n", entries_count);
 	return 0;
 }
 
@@ -211,6 +214,7 @@ int lfs_mknod(const char *path, mode_t mode, dev_t rdev) {
 	e->access_time = time(NULL);
 	e->modification_time = time(NULL);
 	entries[index] = e;
+	entries_count++;
 	return 0;
 }
 
@@ -232,6 +236,7 @@ int lfs_unlink(const char *path) {
 			printf("lfs_unlink: file name %s: removed\n", entries[i]->name);
 			entries[i] = NULL;
 			free(e);
+			entries_count--;
 			return 0;
 		}
 	}
@@ -377,7 +382,7 @@ int lfs_mkdir(const char *path, mode_t mode) {
 	printf("Print all entries: \n\n\n");
 	print_entries();
 	printf("\n");
-
+	entries_count++;
 	return 0;
 }
 
@@ -416,6 +421,7 @@ int lfs_rmdir(const char *path) {
 	}
 	//Delete entry
 	delete_entry(path);
+	entries_count--;
 	return 0;
 }
 
