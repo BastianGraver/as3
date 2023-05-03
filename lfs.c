@@ -50,6 +50,7 @@ struct entry {
 
 static struct entry *entries[MAX_ENTRIES];
 static int entries_count = 0;
+static FILE *fp;
 
 //method that print all entries in the system.
 void print_entries() {
@@ -81,7 +82,6 @@ char* get_parent_path(const char* path) {
 int find_empty_entry() {
 	printf("----------------find_empty_entry----------------\n");
 	for (int i = 0; i < MAX_ENTRIES; i++) {
-		printf("i: %d \n", entries[i]);
 		if (entries[i] == NULL) {
 			return i;
 		}
@@ -439,13 +439,118 @@ int lfs_utime(const char *path, struct utimbuf *ubuf) {
 	return 0;
 }
 
+int read_entries_from_file () {
+	printf("----------------read_entries_from_file----------------\n");
+	size_t bytes_read;
+
+	//Read the numbers of entries from the file
+	bytes_read = fread(&entries_count, sizeof(int), 1, fp);
+	printf("Read entries_count: %d\n", entries_count);
+
+	if(entries_count > MAX_ENTRIES) {
+		printf("Error: Too many entries in the file system\n");
+		return -1;
+	}
+
+	if(entries_count < 0) {
+		printf("Error: Invalid number of entries in the file system\n");
+		return -1;
+	}
+
+	if(entries_count > 0) {
+		//Read the entries from the file
+		for (int i = 0; i < entries_count; i++) {
+			size_t size;
+			entries[i] = calloc(sizeof(struct entry), 1);
+			if (!entries[i]) {
+				printf("Error: Could not allocate memory\n");
+			}
+
+			//Read full_path
+			bytes_read = fread(&size, sizeof(size_t), 1, fp);
+			entries[i]->full_path = calloc(sizeof(char), size);
+			if(!entries[i]->full_path){
+				return -ENOMEM;
+				printf("Error: Could not allocate memory\n");
+			}
+
+			bytes_read = fread(entries[i]->full_path, size, 1, fp);
+			printf("Read full_path: %s\n", entries[i]->full_path);
+
+			entries[i]->name = calloc(sizeof(char), size);
+			entries[i]->path = calloc(sizeof(char), size);
+			entries[i]->name = get_entry_name(entries[i]->full_path);
+			entries[i]->path = get_parent_path(entries[i]->full_path);
+
+			printf("THE NAME IS: %s\n", entries[i]->name);
+
+			bytes_read = fread(&entries[i]->is_dir, sizeof(bool), 1, fp);
+			bytes_read = fread(&entries[i]->access_time, sizeof(time_t), 1, fp);
+			bytes_read = fread(&entries[i]->modification_time, sizeof(time_t), 1, fp);
+
+			if (!entries[i]->is_dir) {
+				bytes_read = fread(&entries[i]->file_size, sizeof(int), 1, fp);
+				entries[i]->data = calloc(sizeof(char), entries[i]->file_size);
+				bytes_read = fread(entries[i]->data, sizeof(char), entries[i]->file_size, fp);
+			}
+		}
+	}
+	fclose(fp);
+	return 0;
+}
+
+//Method that writes the entries to the file
+int write_entries_to_file () {
+	printf("----------------write_entries_to_file----------------\n");
+	printf("Write entries to file\n");
+	fwrite(&entries_count, sizeof(int), 1, fp);
+
+	for (int i = 0; i < entries_count; i++) {
+
+		size_t size = strlen(entries[i]->full_path);
+		fwrite(&size, sizeof(size_t), 1, fp);
+		fwrite(entries[i]->full_path, sizeof(char), size, fp);
+
+		fwrite(&entries[i]->is_dir, sizeof(bool), 1, fp);
+		fwrite(&entries[i]->access_time, sizeof(time_t), 1, fp);
+		fwrite(&entries[i]->modification_time, sizeof(time_t), 1, fp);
+
+		if(!entries[i]->is_dir) {
+			fwrite(&entries[i]->file_size, sizeof(int), 1, fp);
+			fwrite(entries[i]->data, sizeof(char), entries[i]->file_size, fp);
+		}
+
+		free(entries[i]->name);
+		free(entries[i]->path);
+		free(entries[i]->full_path);
+		free(entries[i]);
+	}
+	fclose(fp);
+	return 0;
+}
+
 int main( int argc, char *argv[] ) {
 
 	// Initialize the entries array to NULL pointers
     memset(entries, 0, MAX_ENTRIES * sizeof(struct entry*));
 
-	fuse_main( argc, argv, &lfs_oper );
+	fp = fopen(argv[4], "rb");
 
+	if (!fp) {
+		printf("Error: File not found\n");
+		return -1;
+	}
+
+	read_entries_from_file();
+
+	printf("Successfully read entries from file\n");
+
+	// Initialize the FUSE operations
+	fuse_main(4, argv, &lfs_oper);
+
+	// Write the entries to the file
+	fp = fopen(argv[4], "wb");
+	write_entries_to_file();
 
 	return 0;
 }
