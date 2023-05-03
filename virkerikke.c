@@ -439,37 +439,10 @@ int lfs_utime(const char *path, struct utimbuf *ubuf) {
 	return 0;
 }
 
-//Function that read the entries from the file
-// void read_entries_from_file (FILE *fp) {
-// 	printf("----------------read_entries_from_file----------------\n");
-// 	printf("read_entries_from_file: (fp=%s)\n", fp);
-// 	//Read the numbers of entries from the file
-// 	fread(&entries_count, sizeof(int), 1, fp);
+void read_entries_from_file (FILE *fp) {
+	printf("----------------read_entries_from_file----------------\n");
+	printf("read_entries_from_file: (fp=%s)\n", fp);
 
-// 	if(entries_count > MAX_ENTRIES) {
-// 		printf("Error: Too many entries in the file system\n");
-// 		return -1;
-// 	}
-
-// 	if(entries_count < 0) {
-// 		printf("Error: Invalid number of entries in the file system\n");
-// 		return -1;
-// 	}
-
-// 	if(entries_count > 0) {
-// 		//Read the entries from the file
-// 		fread(entries, sizeof(struct entry), entries_count, fp);
-// 	}
-// }
-
-int main( int argc, char *argv[] ) {
-
-	// Initialize the entries array to NULL pointers
-    memset(entries, 0, MAX_ENTRIES * sizeof(struct entry*));
-
-	FILE *fp = fopen(argv[3], "rb");
-
-	
 	//Read the numbers of entries from the file
 	fread(&entries_count, sizeof(int), 1, fp);
 
@@ -514,13 +487,15 @@ int main( int argc, char *argv[] ) {
 			}
 		}
 	}
-	
 	fclose(fp);
+}
 
-	fuse_main( argc, argv, &lfs_oper );
+//Method that writes the entries to the file
+void write_entries_to_file (FILE *fp) {
+	printf("----------------write_entries_to_file----------------\n");
+	printf("write_entries_to_file: (fp=%s)\n", fp);
 
 
-	//Write the entries to the file
 	printf("Write entries to file\n");
 	fwrite(&entries_count, sizeof(int), 1, fp);
 
@@ -553,5 +528,24 @@ int main( int argc, char *argv[] ) {
 		free(entries[i]);
 	}
 	fclose(fp);
+}
+
+int main( int argc, char *argv[] ) {
+
+	// Initialize the entries array to NULL pointers
+    memset(entries, 0, MAX_ENTRIES * sizeof(struct entry*));
+
+	FILE *fp = fopen(argv[3], "rb");
+
+	read_entries_from_file(fp);
+	printf("Successfully read entries from file\n");
+
+	// Initialize the FUSE operations
+	fuse_main(argc, argv, &lfs_oper);
+
+	// Write the entries to the file
+	fp = fopen(argv[3], "wb");
+	write_entries_to_file(fp);
+
 	return 0;
 }
