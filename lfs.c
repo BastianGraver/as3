@@ -500,7 +500,7 @@ int read_entries_from_file () {
 }
 
 //Method that writes the entries to the file
-int write_entries_to_file () {
+int write_entries_to_file (bool running) {
 	printf("----------------write_entries_to_file----------------\n");
 	printf("Write entries to file\n");
 	fwrite(&entries_count, sizeof(int), 1, fp);
@@ -519,11 +519,12 @@ int write_entries_to_file () {
 			fwrite(&entries[i]->file_size, sizeof(int), 1, fp);
 			fwrite(entries[i]->data, sizeof(char), entries[i]->file_size, fp);
 		}
-
-		free(entries[i]->name);
-		free(entries[i]->path);
-		free(entries[i]->full_path);
-		free(entries[i]);
+		if (!running) {
+			free(entries[i]->name);
+			free(entries[i]->path);
+			free(entries[i]->full_path);
+			free(entries[i]);
+		}
 	}
 	fclose(fp);
 	return 0;
@@ -545,12 +546,26 @@ int main( int argc, char *argv[] ) {
 
 	printf("Successfully read entries from file\n");
 
+	pid_t pid;
+	pid = fork();
+
+	if (pid < 0) {
+		printf("Error: Could not fuck\n");
+		return -1;
+	}
+	else if (pid == 0) {
+		while(true)	{
+			write_entries_to_file(true);
+			sleep(20);
+		}
+	}
+
 	// Initialize the FUSE operations
 	fuse_main(4, argv, &lfs_oper);
 
 	// Write the entries to the file
 	fp = fopen(argv[4], "wb");
-	write_entries_to_file();
+	write_entries_to_file(false);
 
 	return 0;
 }
