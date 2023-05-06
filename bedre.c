@@ -39,7 +39,7 @@ static struct fuse_operations lfs_oper = {
 // entry in the system.
 struct entry {
 	char *name;
-	char *path;
+	char *parent_path;
 	char *full_path;
 	bool is_dir;
 	int file_size;
@@ -79,7 +79,7 @@ int find_empty_entry() {
 			return i;
 		}
 	}
-	fprintf("No more space for entries\n");
+	printf("No more space for entries\n");
 	return -1;
 }
 
@@ -138,7 +138,7 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
 			if(entries[i]) {
 				char* tmp = strdup(path);
 				strcat(tmp, "/");
-				if (strcmp(entries[i]->path, tmp) == 0) {
+				if (strcmp(entries[i]->parent_path, tmp) == 0) {
 					filler(buf, entries[i]->name, NULL, 0);
 				}
 			}
@@ -149,8 +149,55 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
 	//If in root
 	for (int i = 0; i < MAX_ENTRIES; i++)
 	{
-		if (entries[i]!= NULL && strcmp(entries[i]->path, path) == 0) {
+		if (entries[i]!= NULL && strcmp(entries[i]->parent_path, path) == 0) {
 			filler(buf, entries[i]->name, NULL, 0);
+		}
+	}
+	return 0;
+}
+
+//Create a entry
+int create_entry(const char *path, bool is_dir) {
+    int index = find_empty_entry();
+    if (index == -1) {
+        printf("lfs_create_node: No more space for entries");
+        return -1;
+    }
+    //Create a new node
+    struct entry *e = (struct entry*) malloc(sizeof(struct entry));
+    if (!e) {
+        printf("lfs_create_node: Failed to allocate memory\n");
+        return -ENOMEM;
+    }
+    e->name = get_entry_name(path);
+    e->parent_path = get_parent_path(path);
+    e->full_path = strdup(path);
+    e->is_dir = is_dir;
+    e->file_size = 0;
+    e->access_time = time(NULL);
+    e->modification_time = time(NULL);
+    e->data = NULL;
+    entries[index] = e;
+    entries_count++;
+    return 0;
+}
+
+//Delete a entry
+int delete_entry (const char *path) {
+	for (int i = 0; i < MAX_ENTRIES; i++) {	
+		if (entries[i] != NULL) {
+			if (strcmp(entries[i]->full_path, path) == 0) {
+				free(entries[i]->full_path);
+				free(entries[i]->name);
+				free(entries[i]->parent_path);
+				if (entries[i]->data != NULL) {
+					free(entries[i]->data);
+				}
+				free(entries[i]);
+				entries[i] = NULL;
+				entries_count--;
+				return 0;
+			}
 		}
 	}
 	return 0;
@@ -158,49 +205,12 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
 
 //Create a file node
 int lfs_mknod(const char *path, mode_t mode, dev_t rdev) {
-	int index = find_empty_entry();
-	if (index == -1) {
-		printf("lfs_mknod: No more space for entries");
-		return -1;
-	}
-
-	//Create a new file
-	struct entry *e = (struct entry*) malloc(sizeof(struct entry));
-	if (!e) {
-        printf("lfs_mknod: Failed to allocate memory\n");
-        return -ENOMEM;
-    }
-	e->name = get_entry_name(path);
-	e->path = get_parent_path(path);
-	e->full_path = strdup(path);
-	e->is_dir = 0;
-	e->file_size = 0;
-	e->access_time = time(NULL);
-	e->modification_time = time(NULL);
-	entries[index] = e;
-	entries_count++;
+    create_entry(path, false);
 	return 0;
 }
 
 int lfs_unlink(const char *path) {
-	//Find the entry
-	struct entry *e = get_entry(path);
-	if (e == NULL) {
-		printf("lfs_unlink: Entry not found\n");
-		return -ENOENT;
-	}
-
-	//Remove the entry
-	for (int i = 0; i < MAX_ENTRIES; i++)
-	{
-		if (entries[i] == e) {
-			entries[i] = NULL;
-			free(e);
-			entries_count--;
-			return 0;
-		}
-	}
-	return -ENOENT;
+	delete_entry(path);
 }
 
 int lfs_open( const char *path, struct fuse_file_info *fi ) {
@@ -284,56 +294,13 @@ int lfs_truncate(const char* path, off_t size) {
 }
 
 int lfs_mkdir(const char *path, mode_t mode) {
-	int index = find_empty_entry();
-	entries[index] = calloc(sizeof(struct entry), 1);
-	if(!entries[index]){
-		return -ENOMEM;
-	}
-
-	struct entry *e = entries[index];
-
-	e->name = get_entry_name(path);
-	e->path = get_parent_path(path);
-	e->full_path = malloc(strlen(path) + 1);
-	if (e->full_path == NULL) {
- 	   free(e);
- 	   return -ENOMEM;
-	}
-	strcpy(e->full_path, path);
-	e->access_time = time(NULL);
-	e->modification_time = time(NULL);
-	e->is_dir = true;
-	e->file_size = 0;
-    e->data = NULL;
-	
-	entries_count++;
+    create_entry(path, true);
 	return 0;
 }
 
 //Delete a directory
 int lfs_rmdir(const char *path) {
-	struct entry *e = get_entry(path);
-	if (e == NULL) {
-		printf("lfs_rmdir: Entry not found\n");
-		return -ENOENT;
-	}
-	if (!e->is_dir) {
-		printf("lfs_rmdir: Entry is not a directory\n");
-		return -ENOTDIR;
-	}
-    for (int i = 0; i < MAX_ENTRIES; i++)
-    {
-        if(entries[i]) {
-            if (strcmp(entries[i]->full_path, path) == 0) {
-                free(entries[i]->name);
-                free(entries[i]->path);
-                free(entries[i]->full_path);
-                free(entries[i]);
-                entries[i] = NULL;
-            }
-        }
-    }
-	entries_count--;
+	delete_entry(path);
 	return 0;
 }
 
@@ -384,9 +351,9 @@ int read_entries_from_file () {
 			bytes_read = fread(entries[i]->full_path, size, 1, fp);
 
 			entries[i]->name = calloc(sizeof(char), size);
-			entries[i]->path = calloc(sizeof(char), size);
+			entries[i]->parent_path = calloc(sizeof(char), size);
 			entries[i]->name = get_entry_name(entries[i]->full_path);
-			entries[i]->path = get_parent_path(entries[i]->full_path);
+			entries[i]->parent_path = get_parent_path(entries[i]->full_path);
 
 
 			bytes_read = fread(&entries[i]->is_dir, sizeof(bool), 1, fp);
@@ -408,25 +375,28 @@ int read_entries_from_file () {
 int write_entries_to_file () {
 	fwrite(&entries_count, sizeof(int), 1, fp);
 
-	for (int i = 0; i < entries_count; i++) {
+	for (int i = 0; entries_count != 0 && i < MAX_ENTRIES; i++) {
+		if (entries[i]) {
+			size_t size = strlen(entries[i]->full_path);
+			fwrite(&size, sizeof(size_t), 1, fp);
+			fwrite(entries[i]->full_path, sizeof(char), size, fp);
 
-		size_t size = strlen(entries[i]->full_path);
-		fwrite(&size, sizeof(size_t), 1, fp);
-		fwrite(entries[i]->full_path, sizeof(char), size, fp);
+			fwrite(&entries[i]->is_dir, sizeof(bool), 1, fp);
+			fwrite(&entries[i]->access_time, sizeof(time_t), 1, fp);
+			fwrite(&entries[i]->modification_time, sizeof(time_t), 1, fp);
 
-		fwrite(&entries[i]->is_dir, sizeof(bool), 1, fp);
-		fwrite(&entries[i]->access_time, sizeof(time_t), 1, fp);
-		fwrite(&entries[i]->modification_time, sizeof(time_t), 1, fp);
+			if(!entries[i]->is_dir) {
+				fwrite(&entries[i]->file_size, sizeof(int), 1, fp);
+				fwrite(entries[i]->data, sizeof(char), entries[i]->file_size, fp);
+			}
 
-		if(!entries[i]->is_dir) {
-			fwrite(&entries[i]->file_size, sizeof(int), 1, fp);
-			fwrite(entries[i]->data, sizeof(char), entries[i]->file_size, fp);
+			free(entries[i]->name);
+			free(entries[i]->parent_path);
+			free(entries[i]->full_path);
+			free(entries[i]);
+			entries_count--;
+			
 		}
-
-		free(entries[i]->name);
-		free(entries[i]->path);
-		free(entries[i]->full_path);
-		free(entries[i]);
 	}
 	fclose(fp);
 	return 0;
