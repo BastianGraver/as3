@@ -286,7 +286,6 @@ int lfs_truncate(const char* path, off_t size) {
 int lfs_mkdir(const char *path, mode_t mode) {
 	int index = find_empty_entry();
 	entries[index] = calloc(sizeof(struct entry), 1);
-
 	if(!entries[index]){
 		return -ENOMEM;
 	}
@@ -296,18 +295,17 @@ int lfs_mkdir(const char *path, mode_t mode) {
 	e->name = get_entry_name(path);
 	e->path = get_parent_path(path);
 	e->full_path = malloc(strlen(path) + 1);
-	e->access_time = time(NULL);
-	e->modification_time = time(NULL);
 	if (e->full_path == NULL) {
  	   free(e);
  	   return -ENOMEM;
 	}
 	strcpy(e->full_path, path);
+	e->access_time = time(NULL);
+	e->modification_time = time(NULL);
 	e->is_dir = true;
 	e->file_size = 0;
+    e->data = NULL;
 	
-	// find empty entry and add it.
-	entries[index] = e;
 	entries_count++;
 	return 0;
 }
